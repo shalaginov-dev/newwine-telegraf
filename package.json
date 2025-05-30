@@ -1,0 +1,27 @@
+{
+	"name": "newwine_telegraf",
+	"version": "1.0.0",
+	"type": "module",
+	"main": "src/index.js",
+	"license": "ISC",
+	"scripts": {
+		"start": "node src/index.js",
+		"dev": "nodemon src/index.js"
+	},
+	"dependencies": {
+		"@prisma/client": "^6.6.0",
+		"dotenv": "^16.4.7",
+		"node-cron": "^3.0.3",
+		"telegraf": "^4.16.3",
+		"winston": "^3.17.0",
+		"winston-daily-rotate-file": "^5.0.0"
+	},
+	"devDependencies": {
+		"nodemon": "^3.1.9",
+		"prisma": "^6.6.0"
+	},
+	"author": {
+		"name": "Ivan Shalaginov",
+		"telegram": "@LazyyKid"
+	}
+}

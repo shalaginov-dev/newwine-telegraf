@@ -1,0 +1,29 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  userId      BigInt @unique @map("user_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@map("users")
+}
+
+model NewImage {
+  id          Int @id
+  url         String
+
+  @@map("new_images")
+}
+
+model OldImage {
+  id          Int @id
+  url         String
+
+  @@map("old_images")
+}
