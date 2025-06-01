@@ -1,8 +1,9 @@
 import { prisma } from '../connection/prisma.js'
 import { bot } from '../connection/token.js'
-import cron from 'node-cron'
 import { logger } from '../utils/logger.js'
 import { monitoring } from '../utils/monitoring.js'
+import { config } from '../config.js'
+import cron from 'node-cron'
 
 const DELAY_MS = 100 // Задержка 100 мс
 
@@ -16,13 +17,12 @@ export class DailyMessage {
 		return new Promise(resolve => setTimeout(resolve, ms))
 	}
 
-	async start() {
+	async start(test = false) {
 		if (this.url_taskMap['job']) {
 			logger.info('Daily message task already running.')
 			return
 		}
-
-		const cronTask = cron.schedule('0 10 * * *', async () => {
+		const cronTask = cron.schedule(config.CRON_SCHEDULE, async () => {
 			try {
 				const users = await prisma.user.findMany({
 					select: { userId: true },
@@ -35,7 +35,7 @@ export class DailyMessage {
 
 				logger.info(`Starting daily message for ${users.length} users.`)
 
-				for (const { userId } of users) {
+				if (test) {
 					try {
 						const randomId = Math.floor(Math.random() * 365) + 1
 						const image = !(this.num % 2)
@@ -47,44 +47,69 @@ export class DailyMessage {
 									where: { id: randomId },
 									select: { url: true },
 							  })
-						await bot.telegram.sendPhoto(userId.toString(), {
+						await bot.telegram.sendPhoto(config.testID, {
 							source: image.url,
 						})
 						monitoring.updateMessageStats(true)
-						logger.info(`Sent daily message to user ${userId}`)
+						logger.info(`Sent daily message to user ${config.testID}`)
 					} catch (error) {
 						monitoring.updateMessageStats(false, error)
-						logger.error(`Error sending message to ${userId}:`, {
+						logger.error(`Error sending message to ${config.testID}:`, {
 							message: error.message,
 							code: error.code,
 							stack: error.stack,
 						})
-						if (error.code === 403) {
-							await prisma.user.delete({ where: { userId } })
-							logger.info(`Removed blocked user ${userId}`)
-						} else if (error.code === 429) {
-							logger.warn(
-								`Rate limit exceeded for ${userId}, retrying after delay.`
-							)
-							await this.delay(1000)
-							try {
-								await bot.telegram.sendPhoto(userId.toString(), {
-									source: image.url,
-								})
-								monitoring.updateMessageStats(true)
-								logger.info(`Retry successful for user ${userId}`)
-							} catch (retryError) {
-								monitoring.updateMessageStats(false, retryError)
-								logger.error(`Retry failed for ${userId}:`, {
-									message: retryError.message,
-									stack: retryError.stack,
-								})
+					}
+				} else {
+					for (const { userId } of users) {
+						try {
+							const randomId = Math.floor(Math.random() * 365) + 1
+							const image = !(this.num % 2)
+								? await prisma.oldImage.findUnique({
+										where: { id: randomId },
+										select: { url: true },
+								  })
+								: await prisma.newImage.findUnique({
+										where: { id: randomId },
+										select: { url: true },
+								  })
+							await bot.telegram.sendPhoto(userId.toString(), {
+								source: image.url,
+							})
+							monitoring.updateMessageStats(true)
+						} catch (error) {
+							monitoring.updateMessageStats(false, error)
+							logger.error(`Error sending message to ${userId}:`, {
+								message: error.message,
+								code: error.code,
+								stack: error.stack,
+							})
+							if (error.code === 403) {
+								await prisma.user.delete({ where: { userId } })
+								logger.info(`Removed blocked user ${userId}`)
+							} else if (error.code === 429) {
+								logger.warn(
+									`Rate limit exceeded for ${userId}, retrying after delay.`
+								)
+								await this.delay(1000)
+								try {
+									await bot.telegram.sendPhoto(userId.toString(), {
+										source: image.url,
+									})
+									monitoring.updateMessageStats(true)
+									logger.info(`Retry successful for user ${userId}`)
+								} catch (retryError) {
+									monitoring.updateMessageStats(false, retryError)
+									logger.error(`Retry failed for ${userId}:`, {
+										message: retryError.message,
+										stack: retryError.stack,
+									})
+								}
 							}
 						}
+						await this.delay(DELAY_MS)
 					}
-					await this.delay(DELAY_MS)
 				}
-
 				await monitoring.logStats()
 
 				logger.info('Daily message task completed.', {
@@ -99,7 +124,7 @@ export class DailyMessage {
 			this.num++
 		})
 		this.url_taskMap['job'] = cronTask
-		logger.info('Daily message task started.')
+		logger.info('Daily message task created.')
 	}
 
 	stop() {
